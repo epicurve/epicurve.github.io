@@ -1,7 +1,9 @@
-/*svg {
+.svg-container {
     display: block;
     margin: 0 auto;
-}*/
+    width: 800px;
+    overflow: visible;
+}
 
 /* AXES */
 /* ticks */

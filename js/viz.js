@@ -1,11 +1,47 @@
 var sim_params = new Object();
-sim_params.beta = 0.0010;
+sim_params.beta = 8E-12;
 sim_params.gamma = 0.01;
 sim_params.v = 0;
 sim_params.mu = 0.5;
-sim_params.m = 3
+sim_params.m = 1000
+sim_params.N = 3E8;
 
 var display_params = new Object();
+display_params.logy = 8.5;
+display_params.offsetx = 60;
+
+var result_params = new Object();
+result_params.logcapacity = 7;
+result_params.treatrate = 0.006;
+result_params.untreatrate = 0.05;
+
+// sim computational params
+var dt = 0.01;
+var T = 100000;
+var num_points = 200;
+var data_frequency = T / num_points;
+var start_date = new Date(2020, 0, 1);
+var end_date = new Date(2020, 0, 1+num_points);
+
+function nFormatter(num) {
+  if (num < 1E3) {
+    return num.toFixed(0);
+  }
+  var si = [
+    { value: 1, symbol: "" },
+    { value: 1E3, symbol: "K" },
+    { value: 1E6, symbol: "M" },
+    { value: 1E9, symbol: "B" },
+  ];
+  var rx = /\.0+$|(\.[0-9]*[1-9])0+$/;
+  var i;
+  for (i = si.length - 1; i > 0; i--) {
+    if (num >= si[i].value) {
+      break;
+    }
+  }
+  return (num / si[i].value).toFixed(1).replace(rx, "$1") + si[i].symbol;
+}
 
 function sim_curve() {
   var beta = sim_params.beta
@@ -13,18 +49,14 @@ function sim_curve() {
   var beta_external = 0.01 * beta;
   var m = sim_params.m;
   var rho = gamma / beta;
-  var dt = 0.1;
-  var T = 10000;
   var v = sim_params.v;
   var mu = sim_params.mu;
-  var N = 500;
-  var y0 = 0.1;
-
-  var num_points = 200;
-  var data_frequency = T / num_points;
+  var N = sim_params.N;
+  var y0 = 100000;
+  var capacity = Math.pow(10, result_params.logcapacity);
 
   var w = 0;
-  var x = 100-y0;
+  var x = N-y0;
   var y = y0;
   var z = 0;
   var dw, dx, dy, dz;
@@ -33,39 +65,65 @@ function sim_curve() {
   var xs = [];
   var ys = [];
   var zs = [];
+  var cs = [];
   // var data = [];
 
   var day = 0;
-  var start_date = new Date(2020, 1, 1);
+  var total_deaths = 0;
+  var total_cases = 0;
+
+  start_date = new Date(2020, 0, 1 + display_params.offsetx);
   for (t = 0; t < T; t++) {
       dx = -beta * x * y - beta_external * (m-1) * x * y - v * x;
       dw = beta * x * y + beta_external * (m-1) * x * y - mu * w;
       dy = mu * w - gamma * y;
       dz = gamma * y + v * x;
 
+      new_cases = mu * w;
+
       w += dw * dt;
       x += dx * dt;
       y += dy * dt;
       z += dz * dt;
 
+      total_cases += new_cases * dt;
+      if (y < capacity) {
+        total_deaths += new_cases * result_params.treatrate * dt;
+      }
+      else {
+        // total_deaths += capacity * result_params.treatrate * dt;
+        total_deaths += new_cases * result_params.untreatrate * dt;
+      }
+
       if (t % data_frequency == 0) {
-        var date = new Date(2020, 1, 1 + day);
+        var date = new Date(2020, 0, 1 + day + display_params.offsetx);
         ws.push({date: date, measurement: w});
         xs.push({date: date, measurement: x});
         ys.push({date: date, measurement: y});
         zs.push({date: date, measurement: z});
+        cs.push({date: date, measurement: capacity});
         // data.push(y)
         day += 1;
       }
   }
-  var end_date = new Date(2020, 1, 1 + day);
+  end_date = new Date(2020, 0, 1 + day + display_params.offsetx);
 
-  var sim_data = [
+  var sim_data = new Object();
+  sim_data.curves = [
     // {id: "waiting", values: ws},
     {id: "infected", values: ys},
+    {id: "capacity", values: cs},
     // {id: "healthy", values: xs},
     // {id: "removed", values: zs},
   ];
+  L = zs.length
+
+  // result_params.logcapacity = 1E6;
+  // result_params.treatrate = 0.006;
+  // result_params.untreatrate = 0.05;
+
+  sim_data.total_num_cases = total_cases; // zs[L-1].measurement;
+  sim_data.total_deaths = total_deaths;
   return sim_data;
 }
 
@@ -75,6 +133,7 @@ const line = d3.line()
 
 function update_plot(sim_data) {
   d3.select("path.line-0").remove()
+  d3.select("path.line-1").remove()
 
   // update_axis(sim_data)
   let id = 0;
@@ -84,7 +143,7 @@ function update_plot(sim_data) {
 
   //----------------------------LINES-----------------------------//
   const lines = svg.selectAll("lines")
-      .data(sim_data)
+      .data(sim_data.curves)
       .enter()
       .append("g");
 
@@ -158,29 +217,24 @@ function update_plot(sim_data) {
 
 //------------------------1. PREPARATION------------------------//
 //-----------------------------SVG------------------------------//
-const width = 960;
+const width = 800;
 const height = 500;
 const margin = 5;
-const padding = 5;
-const adj = 30;
+const padding = 20;
+const adj = 50;
 // we are appending SVG first
 const container = d3.select("div#container")
 
-function update() {
-  beta = document.getElementById("beta_slider").value;
-  gamma = document.getElementById("gamma_slider").value;
-  sim_data = sim_curve();
-  update_plot(sim_data);
-}
-
-function make_new_slider(sim_param_name, min, max, step) {
+function make_new_sim_param_slider(sim_param_name, min, max, step) {
   function update() {
-    sim_params[sim_param_name] = document.getElementById(sim_param_name).value;
+    sim_params[sim_param_name] = Number(document.getElementById(sim_param_name).value);
     sim_data = sim_curve();
     update_plot(sim_data);
+    update_text(sim_data)
   }
 
-  slider_input = container.append("div")
+  const siminput_container = d3.select(".siminputs")
+  slider_input = siminput_container.append("div")
     .attr("class", "inputdiv");
   // slider_input.append("div").text(min);
   slider_input.append("div")
@@ -199,11 +253,72 @@ function make_new_slider(sim_param_name, min, max, step) {
   // slider_input.append("div").text(max).attr("style", "width:150px");
 }
 
-make_new_slider("beta", 0.0001, 0.0010, 0.0001, )
-make_new_slider("gamma", 0.01, 0.10, 0.01)
-make_new_slider("mu", 0.0, 1.0, 0.1)
-make_new_slider("v", 0.0, 0.01, 0.001)
-make_new_slider("m", 0, 100, 10)
+make_new_sim_param_slider("beta", 5E-12, 7E-12, 5E-13, )
+make_new_sim_param_slider("gamma", 0.01, 0.10, 0.01)
+make_new_sim_param_slider("mu", 0.0, 1.0, 0.1)
+make_new_sim_param_slider("v", 0.0, 0.01, 0.001)
+// make_new_slider("m", 0, 100, 10)
+
+function make_new_display_param_slider(display_param_name, min, max, step) {
+  function update() {
+    display_params[display_param_name] = Number(document.getElementById(display_param_name).value);
+    sim_data = sim_curve();
+    update_axis(sim_data);
+    update_plot(sim_data);
+  }
+
+  const displayinput_container = d3.select(".displayinputs")
+  slider_input = displayinput_container.append("div")
+    .attr("class", "inputdiv");
+  // slider_input.append("div").text(min);
+  slider_input.append("div")
+    .text(min + " < " + display_param_name + " > " + max);
+  // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
+  slider_input.append("input")
+    .attr("type", "range")
+    .attr("min", min)
+    .attr("max", max)
+    .attr("step", step)
+    .attr("id", display_param_name)
+    .attr("value", display_params[display_param_name])
+    .on("input", function input() {
+      update();
+    });
+  // slider_input.append("div").text(max).attr("style", "width:150px");
+}
+make_new_display_param_slider("logy", 2, 9, 0.5);
+make_new_display_param_slider("offsetx", 0, 300, 30);
+
+function make_new_result_param_slider(result_param_name, min, max, step) {
+  function update() {
+    result_params[result_param_name] = Number(document.getElementById(result_param_name).value);
+    sim_data = sim_curve();
+    update_axis(sim_data);
+    update_plot(sim_data);
+  }
+
+  const resultinput_container = d3.select(".resultinputs")
+  slider_input = resultinput_container.append("div")
+    .attr("class", "inputdiv");
+  // slider_input.append("div").text(min);
+  slider_input.append("div")
+    .text(min + " < " + result_param_name + " > " + max);
+  // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
+  slider_input.append("input")
+    .attr("type", "range")
+    .attr("min", min)
+    .attr("max", max)
+    .attr("step", step)
+    .attr("id", result_param_name)
+    .attr("value", result_params[result_param_name])
+    .on("input", function input() {
+      update();
+    });
+  // slider_input.append("div").text(max).attr("style", "width:150px");
+}
+make_new_result_param_slider("logcapacity", 1, 7, 0.5);
+make_new_result_param_slider("treatrate", 0, 0.02, 0.002);
+make_new_result_param_slider("untreatrate", 0, 0.05, 0.005);
 
 const svg = container.append("svg")
     .attr("preserveAspectRatio", "xMinYMin meet")
@@ -229,18 +344,14 @@ var xaxis;
 function update_axis(sim_data) {
   xScale = d3.scaleTime().range([0,width]);
   yScale = d3.scaleLinear().rangeRound([height, 0]);
-  L = sim_data[0].values.length
-  dates = [sim_data[0].values[0].date, sim_data[0].values[L-1].date]
+  dates = [start_date, end_date]
   xScale.domain(dates);
-  yScale.domain([(0), d3.max(sim_data, function(c) {
-      return d3.max(c.values, function(d) {
-          return d.measurement + 4; });
-          })
-      ]);
+  yScale.domain([0, Math.pow(10, display_params.logy)]);
 
   //-----------------------------AXES-----------------------------//
   yaxis = d3.axisLeft()
       .ticks(10) // (slices[0].values).length)
+      .tickFormat(nFormatter)
       .scale(yScale);
 
   xaxis = d3.axisBottom()
@@ -282,5 +393,30 @@ svg.append("g")
     // .attr("y", 6)
     // .style("text-anchor", "end")
     // .text("Frequency");
+
+svg.append("text")
+  .attr("class", "text-cases")
+  .attr("x", 700)
+  .attr("y", 20)
+  .text(" cases")
+
+svg.append("text")
+  .attr("class", "text-deaths")
+  .attr("x", 700)
+  .attr("y", 40)
+  .text(" deaths")
+
+function update_text(sim_data) {
+  cases = nFormatter(sim_data.total_num_cases);
+  deaths = nFormatter(sim_data.total_deaths);
+  case_percent = (sim_data.total_num_cases / sim_params.N * 100).toFixed(1)
+  death_percent = (sim_data.total_deaths / sim_params.N * 100).toFixed(1)
+  d3.select(".text-cases")
+    .text(cases + " cases (" + case_percent + "%)");
+  d3.select(".text-deaths")
+    .text(deaths + " deaths (" + death_percent + "%)");
+}
+
+update_text(sim_data)
 
 update_plot(sim_data)
