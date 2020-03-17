@@ -1,14 +1,17 @@
 var sim_params = new Object();
-sim_params.beta = 8E-12;
+sim_params.beta = 2.3E-3;
 sim_params.gamma = 0.02;
 sim_params.v = 0;
 sim_params.mu = 0.5;
 sim_params.m = 1000
 sim_params.N = 3E8;
+sim_params.y0 = 10000;
+
+var selectCountryValue = "South Korea";
 
 var display_params = new Object();
 display_params.logy = 7;
-display_params.startx = 60;
+display_params.startx = 20;
 display_params.offsetx = 0;
 
 var result_params = new Object();
@@ -45,7 +48,8 @@ function nFormatter(num) {
 }
 
 function sim_curve() {
-  var beta = sim_params.beta
+  var beta = sim_params.beta / sim_params.N
+  console.log(beta)
   var gamma = sim_params.gamma
   var beta_external = 0.01 * beta;
   var m = sim_params.m;
@@ -53,7 +57,7 @@ function sim_curve() {
   var v = sim_params.v;
   var mu = sim_params.mu;
   var N = sim_params.N;
-  var y0 = 10000;
+  var y0 = sim_params.y0;
   var capacity = Math.pow(10, result_params.logcapacity);
 
   var w = 0;
@@ -128,11 +132,31 @@ const line = d3.line()
     .x(function(d) { return xScale(d.date); })
     .y(function(d) { return yScale(d.measurement); });
 
-function update_plot(sim_data) {
+function update_plot2(data) {
+  d3.select("path.line-2").remove()
+
+  // update_axis(data)
+  let id = 0;
+  const ids = function () {
+      return "line-2";
+  }
+
+  //----------------------------LINES-----------------------------//
+  const lines = svg.selectAll("lines")
+      .data(data.curves)
+      .enter()
+      .append("g");
+
+  lines.append("path")
+  .attr("class", ids)
+  .attr("d", function(d) { return line(d.values); });
+}
+
+function update_plot(data) {
   d3.select("path.line-0").remove()
   d3.select("path.line-1").remove()
 
-  // update_axis(sim_data)
+  // update_axis(data)
   let id = 0;
   const ids = function () {
       return "line-"+id++;
@@ -140,7 +164,7 @@ function update_plot(sim_data) {
 
   //----------------------------LINES-----------------------------//
   const lines = svg.selectAll("lines")
-      .data(sim_data.curves)
+      .data(data.curves)
       .enter()
       .append("g");
 
@@ -250,10 +274,37 @@ function make_new_sim_param_slider(sim_param_name, min, max, step) {
   // slider_input.append("div").text(max).attr("style", "width:150px");
 }
 
-make_new_sim_param_slider("beta", 5E-12, 8E-12, 2E-13, )
+function make_new_sim_param_input(sim_param_name) {
+  function update() {
+    sim_params[sim_param_name] = Number(document.getElementById(sim_param_name).value);
+    sim_data = sim_curve();
+    update_plot(sim_data);
+    update_text(sim_data)
+  }
+
+  const siminput_container = d3.select(".siminputs")
+  slider_input = siminput_container.append("div")
+    .attr("class", "inputdiv");
+  // slider_input.append("div").text(min);
+  slider_input.append("div")
+    .text(sim_param_name);
+  // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
+  slider_input.append("input")
+    .attr("type", "number")
+    .attr("id", sim_param_name)
+    .attr("value", sim_params[sim_param_name])
+    .on("input", function input() {
+      update();
+    });
+  // slider_input.append("div").text(max).attr("style", "width:150px");
+}
+
+make_new_sim_param_slider("beta", 1.5E-3, 2.5E-3, 5E-5, )
 make_new_sim_param_slider("gamma", 0.01, 0.03, 0.001)
-make_new_sim_param_slider("mu", 0.0, 1.0, 0.1)
+// make_new_sim_param_slider("mu", 0.0, 1.0, 0.1)
 make_new_sim_param_slider("v", 0.0, 0.01, 0.001)
+make_new_sim_param_input("N")
+make_new_sim_param_input("y0")
 // make_new_slider("m", 0, 100, 10)
 
 function make_new_display_param_slider(display_param_name, min, max, step) {
@@ -285,7 +336,7 @@ function make_new_display_param_slider(display_param_name, min, max, step) {
   // slider_input.append("div").text(max).attr("style", "width:150px");
 }
 make_new_display_param_slider("logy", 2, 9, 0.5);
-make_new_display_param_slider("startx", 0, 300, 30);
+make_new_display_param_slider("startx", 0, 200, 20);
 // make_new_display_param_slider("offsetx", 0, 300, 30);
 
 function make_new_result_param_slider(result_param_name, min, max, step) {
@@ -366,6 +417,10 @@ function update_axis(sim_data) {
   svg.select(".yaxis")
       .transition(t)
       .call(yaxis)
+
+  if (real_data && real_data.curves) {
+    update_plot2(real_data);
+  }
 }
 
 //---------------------------TOOLTIP----------------------------//
@@ -420,3 +475,67 @@ function update_text(sim_data) {
 update_text(sim_data)
 
 update_plot(sim_data)
+
+var real_data = new Object();
+real_data.countries = new Object();
+real_data.curves = [];
+// L = real_data.countries.date.length
+function load_csv() {
+  real_data.countries = d3.csv("data/total_cases.csv").then(function(data) {
+    keys = Object.keys(data[0]);
+    for (const key of keys) {
+      if (key != "date") {
+        values = []
+        for (var i = 0; i < data.length; i++) {
+          v = data[i][key];
+          if (v != "") {
+            values.push({
+              date: new Date(data[i].date),
+              measurement: Number(v)
+            });
+          }
+        }
+        d = {id: key, values: values};
+        real_data.countries[key] = d;
+      }
+    }
+
+    const resultinput_container = d3.select(".resultinputs")
+    slider_input = resultinput_container.append("div")
+      .attr("class", "inputdiv");
+    slider_input.append("div")
+      .text("Country Data");
+    countries = Object.keys(real_data.countries)
+    var select = slider_input.append('select')
+        .attr('class', 'select')
+        .attr('value', selectCountryValue)
+        .on('change', onchange)
+
+    var options = select
+      .selectAll('option')
+      .data(countries).enter()
+      .append('option')
+        .text(function (d) { return d; });
+
+    function onchange() {
+      selectCountryValue = d3.select('select').property('value')
+      real_data.curves = [real_data.countries[selectCountryValue]];
+      update_plot2(real_data);
+    };
+  });
+  // , function(data) {
+  //   entries = Object.entries(data);
+  //   for (const [key, value] of entries) {
+  //     if (key in real_data.countries) {
+  //       real_data.countries[key].push(value);
+  //     }
+  //     else {
+  //       real_data.countries[key] = [value];
+  //     }
+  //   };
+  // });
+}
+// for (var i = 0; i <
+
+load_csv()
+// console.log(real_data)
