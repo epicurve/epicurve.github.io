@@ -250,7 +250,7 @@ function make_new_sim_param_slider(sim_param_name, min, max, step) {
   // slider_input.append("div").text(max).attr("style", "width:150px");
 }
 
-make_new_sim_param_slider("beta", 5E-12, 8E-12, 5E-13, )
+make_new_sim_param_slider("beta", 5E-12, 8E-12, 2E-13, )
 make_new_sim_param_slider("gamma", 0.01, 0.03, 0.001)
 make_new_sim_param_slider("mu", 0.0, 1.0, 0.1)
 make_new_sim_param_slider("v", 0.0, 0.01, 0.001)
@@ -286,7 +286,7 @@ function make_new_display_param_slider(display_param_name, min, max, step) {
 }
 make_new_display_param_slider("logy", 2, 9, 0.5);
 make_new_display_param_slider("startx", 0, 300, 30);
-make_new_display_param_slider("offsetx", 0, 300, 30);
+// make_new_display_param_slider("offsetx", 0, 300, 30);
 
 function make_new_result_param_slider(result_param_name, min, max, step) {
   function update() {
