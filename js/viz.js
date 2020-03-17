@@ -7,7 +7,7 @@ sim_params.m = 1000
 sim_params.N = 3E8;
 sim_params.y0 = 10000;
 
-var selectCountryValue = "South Korea";
+var selectCountryValue = "World";
 
 var display_params = new Object();
 display_params.logy = 7;
@@ -18,6 +18,18 @@ var result_params = new Object();
 result_params.logcapacity = 6;
 result_params.treatrate = 0.002;
 result_params.untreatrate = 0.02;
+
+var descriptions = new Object();
+descriptions.beta = "Infectivity";
+descriptions.gamma = "Recovery rate";
+descriptions.v = "Vaccination rate";
+descriptions.N = "Population";
+descriptions.y0 = "Initial Infections";
+descriptions.logy = "Y Scale (log)";
+descriptions.startx = "X Offset";
+descriptions.logcapacity = "Hosp. Capacity (log)";
+descriptions.treatrate = "Mortality (treated)";
+descriptions.untreatrate = "Mortality (untreated)";
 
 // sim computational params
 var dt = 0.01;
@@ -49,7 +61,6 @@ function nFormatter(num) {
 
 function sim_curve() {
   var beta = sim_params.beta / sim_params.N
-  console.log(beta)
   var gamma = sim_params.gamma
   var beta_external = 0.01 * beta;
   var m = sim_params.m;
@@ -259,7 +270,11 @@ function make_new_sim_param_slider(sim_param_name, min, max, step) {
     .attr("class", "inputdiv");
   // slider_input.append("div").text(min);
   slider_input.append("div")
-    .text(min + " < " + sim_param_name + " > " + max);
+    .text(descriptions[sim_param_name]);
+  // slider_input.append("div")
+    // .text(sim_param_name);
+  slider_input.append("div")
+    .text(min + " <-----> " + max);
   // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
   slider_input.append("input")
     .attr("type", "range")
@@ -285,9 +300,11 @@ function make_new_sim_param_input(sim_param_name) {
   const siminput_container = d3.select(".siminputs")
   slider_input = siminput_container.append("div")
     .attr("class", "inputdiv");
-  // slider_input.append("div").text(min);
   slider_input.append("div")
-    .text(sim_param_name);
+    .text(descriptions[sim_param_name]);
+  // slider_input.append("div").text(min);
+  // slider_input.append("div")
+  //   .text(sim_param_name);
   // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
   slider_input.append("input")
     .attr("type", "number")
@@ -302,7 +319,7 @@ function make_new_sim_param_input(sim_param_name) {
 make_new_sim_param_slider("beta", 1.5E-3, 2.5E-3, 5E-5, )
 make_new_sim_param_slider("gamma", 0.01, 0.03, 0.001)
 // make_new_sim_param_slider("mu", 0.0, 1.0, 0.1)
-make_new_sim_param_slider("v", 0.0, 0.01, 0.001)
+make_new_sim_param_slider("v", 0.0, 1e-4, 1e-5)
 make_new_sim_param_input("N")
 make_new_sim_param_input("y0")
 // make_new_slider("m", 0, 100, 10)
@@ -321,7 +338,9 @@ function make_new_display_param_slider(display_param_name, min, max, step) {
     .attr("class", "inputdiv");
   // slider_input.append("div").text(min);
   slider_input.append("div")
-    .text(min + " < " + display_param_name + " > " + max);
+    .text(descriptions[display_param_name]);
+  slider_input.append("div")
+    .text(min + " <-----> " + max);
   // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
   slider_input.append("input")
     .attr("type", "range")
@@ -353,7 +372,9 @@ function make_new_result_param_slider(result_param_name, min, max, step) {
     .attr("class", "inputdiv");
   // slider_input.append("div").text(min);
   slider_input.append("div")
-    .text(min + " < " + result_param_name + " > " + max);
+    .text(descriptions[result_param_name]);
+  slider_input.append("div")
+    .text(min + " <-----> " + max);
   // slider_input.append("div").text(min).attr("style", "width:150px; margin:0px");
   slider_input.append("input")
     .attr("type", "range")
@@ -508,6 +529,7 @@ function load_csv() {
     countries = Object.keys(real_data.countries)
     var select = slider_input.append('select')
         .attr('class', 'select')
+        // .attr('multiple', 'select')
         .attr('value', selectCountryValue)
         .on('change', onchange)
 
@@ -517,10 +539,28 @@ function load_csv() {
       .append('option')
         .text(function (d) { return d; });
 
+    real_data.curves = [real_data.countries.World];
+    update_plot2(real_data);
+
     function onchange() {
+      selectCountryValue = []
       selectCountryValue = d3.select('select').property('value')
-      real_data.curves = [real_data.countries[selectCountryValue]];
-      update_plot2(real_data);
+      // d3.select('select') // .property('value')
+      //   .selectAll("option:checked").each(function(value) {
+      //     selectCountryValue.push(value)
+      //   });
+      // not dealing with multiple selections atm
+      if (selectCountryValue) {
+        // selectCountryValue = selectCountryValue[0]
+        country_data = real_data.countries[selectCountryValue];
+        L = country_data.values.length;
+        max_value = Number(country_data.values[L-1].measurement);
+        display_params.logy = Math.log(max_value) / Math.log(10);
+        real_data.curves = [country_data];
+        update_axis(real_data);
+        update_plot(sim_data);
+        update_plot2(real_data);
+      };
     };
   });
   // , function(data) {
